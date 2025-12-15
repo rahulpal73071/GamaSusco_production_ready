@@ -647,6 +647,10 @@ POST /api/v1/reports/generate
 
 ## 🚢 Production Deployment
 
+📖 **Full deployment guide available:** See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed Hostinger VPS deployment instructions.
+
+🚀 **Quick deployment:** See [QUICK_START_DEPLOYMENT.md](./QUICK_START_DEPLOYMENT.md) for a condensed guide.
+
 ### Backend Deployment
 
 #### Using Docker (Recommended)
