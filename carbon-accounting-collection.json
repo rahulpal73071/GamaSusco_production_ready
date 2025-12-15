@@ -1,0 +1,159 @@
+{
+  "info": {
+    "name": "Carbon Accounting - SHUB Demo",
+    "description": "Essential endpoints for client demo",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": ["{{base_url}}"],
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "2. Company Details",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/companies/{{company_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api", "companies", "{{company_id}}"]
+        }
+      }
+    },
+    {
+      "name": "3. Company Statistics",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/companies/{{company_id}}/statistics",
+          "host": ["{{base_url}}"],
+          "path": ["api", "companies", "{{company_id}}", "statistics"]
+        }
+      }
+    },
+    {
+      "name": "4. Company Dashboard",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/companies/{{company_id}}/dashboard",
+          "host": ["{{base_url}}"],
+          "path": ["api", "companies", "{{company_id}}", "dashboard"]
+        }
+      }
+    },
+    {
+      "name": "5. Scope Breakdown",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/companies/{{company_id}}/scope-breakdown",
+          "host": ["{{base_url}}"],
+          "path": ["api", "companies", "{{company_id}}", "scope-breakdown"]
+        }
+      }
+    },
+    {
+      "name": "6. Calculate Diesel Emissions",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"activity_type\": \"diesel\",\n  \"quantity\": 100,\n  \"unit\": \"litre\",\n  \"region\": \"India\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/emissions/calculate",
+          "host": ["{{base_url}}"],
+          "path": ["api", "emissions", "calculate"]
+        }
+      }
+    },
+    {
+      "name": "7. List Activities",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/companies/{{company_id}}/activities",
+          "host": ["{{base_url}}"],
+          "path": ["api", "companies", "{{company_id}}", "activities"]
+        }
+      }
+    },
+    {
+      "name": "8. Top Emitters",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/companies/{{company_id}}/top-emitters?limit=5",
+          "host": ["{{base_url}}"],
+          "path": ["api", "companies", "{{company_id}}", "top-emitters"],
+          "query": [
+            {
+              "key": "limit",
+              "value": "5"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "9. Create New Activity",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"activity_type\": \"diesel\",\n  \"quantity\": 50,\n  \"unit\": \"litre\",\n  \"activity_date\": \"2025-10-15\",\n  \"description\": \"Demo test activity\",\n  \"location\": \"Mumbai Office\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/companies/{{company_id}}/activities",
+          "host": ["{{base_url}}"],
+          "path": ["api", "companies", "{{company_id}}", "activities"]
+        }
+      }
+    },
+    {
+      "name": "10. Timeline Monthly",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/companies/{{company_id}}/timeline?group_by=month",
+          "host": ["{{base_url}}"],
+          "path": ["api", "companies", "{{company_id}}", "timeline"],
+          "query": [
+            {
+              "key": "group_by",
+              "value": "month"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

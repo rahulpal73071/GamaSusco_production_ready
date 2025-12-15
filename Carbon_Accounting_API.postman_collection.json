@@ -1,0 +1,667 @@
+{
+  "info": {
+    "name": "Carbon Accounting Platform API v3.0",
+    "description": "Complete API collection for Carbon Accounting Platform\n\nAuthor: SHUB-0510\nDate: 2025-10-12 20:45:49",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "company_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "activity_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "goal_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "🏠 System",
+      "item": [
+        {
+          "name": "Root",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"],
+              "path": [""]
+            }
+          }
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "API Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/info",
+              "host": ["{{base_url}}"],
+              "path": ["api", "info"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔐 Authentication",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('user_id', jsonData.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"shub_test\",\n  \"email\": \"shub@carbonplatform.com\",\n  \"password\": \"SecurePass123!\",\n  \"full_name\": \"SHUB-0510\",\n  \"company\": \"Carbon Tech Inc\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('access_token', jsonData.access_token);",
+                  "    pm.collectionVariables.set('refresh_token', jsonData.refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "shub_test",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "SecurePass123!",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/refresh?refresh_token={{refresh_token}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "refresh"],
+              "query": [
+                {
+                  "key": "refresh_token",
+                  "value": "{{refresh_token}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 Activities",
+      "item": [
+        {
+          "name": "Create Activity",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('activity_id', jsonData.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Office Electricity Consumption\",\n  \"scope\": 2,\n  \"category\": \"Energy\",\n  \"description\": \"Monthly electricity usage\",\n  \"unit\": \"kWh\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/activities/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "activities", ""]
+            }
+          }
+        },
+        {
+          "name": "List Activities",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/activities/?skip=0&limit=100",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "activities", ""],
+              "query": [
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
+                },
+                {
+                  "key": "scope",
+                  "value": "2",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Activity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/activities/{{activity_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "activities", "{{activity_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Activity",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated monthly electricity usage tracking\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/activities/{{activity_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "activities", "{{activity_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Activity",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/activities/{{activity_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "activities", "{{activity_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📁 File Upload",
+      "item": [
+        {
+          "name": "Upload Document",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/upload/document",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "upload", "document"]
+            }
+          }
+        },
+        {
+          "name": "Get Processing Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/upload/status/:job_id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "upload", "status", ":job_id"],
+              "variable": [
+                {
+                  "key": "job_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📥 Bulk Import",
+      "item": [
+        {
+          "name": "Download Template",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bulk/template",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bulk", "template"]
+            }
+          }
+        },
+        {
+          "name": "Bulk Import",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bulk/import",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bulk", "import"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🎯 Goals",
+      "item": [
+        {
+          "name": "Create Goal",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('goal_id', jsonData.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Reduce company emissions by 30% by 2030\",\n  \"target_reduction_percent\": 30.0,\n  \"baseline_year\": 2024,\n  \"target_year\": 2030,\n  \"description\": \"Comprehensive emission reduction across all scopes\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/goals/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "goals", ""]
+            }
+          }
+        },
+        {
+          "name": "List Goals",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/goals/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "goals", ""]
+            }
+          }
+        },
+        {
+          "name": "Get Goal Progress",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/goals/{{goal_id}}/progress",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "goals", "{{goal_id}}", "progress"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "💡 Recommendations",
+      "item": [
+        {
+          "name": "Get Recommendations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/recommendations/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "recommendations", ""]
+            }
+          }
+        },
+        {
+          "name": "Get Recommendation Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/recommendations/:recommendation_id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "recommendations", ":recommendation_id"],
+              "variable": [
+                {
+                  "key": "recommendation_id",
+                  "value": "rec_001"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📈 Reports",
+      "item": [
+        {
+          "name": "Generate Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"report_type\": \"summary\",\n  \"date_range\": {\n    \"start_date\": \"2024-01-01\",\n    \"end_date\": \"2024-12-31\"\n  },\n  \"group_by\": \"month\",\n  \"export_format\": \"json\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/generate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "generate"]
+            }
+          }
+        },
+        {
+          "name": "Export CSV",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"report_type\": \"detailed\",\n  \"date_range\": {\n    \"start_date\": \"2024-01-01\",\n    \"end_date\": \"2024-12-31\"\n  },\n  \"group_by\": \"month\",\n  \"export_format\": \"csv\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/export/csv",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "export", "csv"]
+            }
+          }
+        },
+        {
+          "name": "Dashboard Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "dashboard"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏆 Benchmarks",
+      "item": [
+        {
+          "name": "List Industries",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/benchmarks/industries",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "benchmarks", "industries"]
+            }
+          }
+        },
+        {
+          "name": "Compare with Industry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"industry\": \"Technology\",\n  \"employee_count\": 150,\n  \"annual_revenue\": 10000000,\n  \"year\": 2024\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/benchmarks/compare",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "benchmarks", "compare"]
+            }
+          }
+        },
+        {
+          "name": "Industry Trends",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/benchmarks/trends/Technology",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "benchmarks", "trends", "Technology"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏢 Companies (Legacy)",
+      "item": [
+        {
+          "name": "List Companies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/companies",
+              "host": ["{{base_url}}"],
+              "path": ["api", "companies"]
+            }
+          }
+        },
+        {
+          "name": "Get Company",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/companies/{{company_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "companies", "{{company_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Company Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/companies/{{company_id}}/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["api", "companies", "{{company_id}}", "dashboard"]
+            }
+          }
+        },
+        {
+          "name": "Company Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/companies/{{company_id}}/statistics",
+              "host": ["{{base_url}}"],
+              "path": ["api", "companies", "{{company_id}}", "statistics"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

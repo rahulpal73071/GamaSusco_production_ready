@@ -1,0 +1,19 @@
+{
+  "defra_factors.csv": {
+    "source_name": "DEFRA 2024",
+    "full_name": "UK Government GHG Conversion Factors for Company Reporting",
+    "priority": 3,
+    "geographic_scope": "UK + International",
+    "use_for_india": "Proxy only - prefer India-specific factors",
+    "iso_14064_compliant": true,
+    "last_updated": "2024-06-01",
+    "update_frequency": "Annual",
+    "total_factors": 537,
+    "india_relevant_factors": 536,
+    "uk_specific_factors": 1,
+    "recommended_use": "Use for UK subsidiaries or as fallback when India-specific data unavailable",
+    "data_quality": "High",
+    "methodology": "Lifecycle Assessment",
+    "url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024"
+  }
+}
