@@ -237,7 +237,10 @@ pip install -r requirements.txt
 Create a `.env` file in the root directory:
 
 ```bash
-cp .env.example .env
+# Copy the example environment file
+cp env.example .env
+
+# Or create manually using the template
 ```
 
 Edit `.env` and add your configuration (see [Configuration](#configuration) section).
