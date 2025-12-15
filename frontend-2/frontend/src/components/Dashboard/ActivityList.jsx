@@ -15,52 +15,47 @@ function ActivityList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [scopeFilter, setScopeFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [activityTypeFilter, setActivityTypeFilter] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [sortBy, setSortBy] = useState('activity_date');
   const [sortOrder, setSortOrder] = useState('desc');
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState(null);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     if (user?.company_id) {
       fetchActivities();
     }
-  }, [user, scopeFilter, categoryFilter, sortBy, sortOrder]);
+  }, [user, scopeFilter, categoryFilter, activityTypeFilter, startDate, endDate, searchTerm, sortBy, sortOrder]);
 
   const fetchActivities = async () => {
     try {
       setLoading(true);
+      setError(null);
+      
       const params = {
         scope: scopeFilter || undefined,
         category: categoryFilter || undefined,
-        limit: 1000, // Large limit to get all activities
+        activity_type: activityTypeFilter || undefined,
+        search: searchTerm || undefined,
+        start_date: startDate || undefined,
+        end_date: endDate || undefined,
+        sort_by: sortBy,
+        sort_order: sortOrder,
+        limit: 500, // Reasonable limit for performance
       };
+
+      // Remove undefined values
+      Object.keys(params).forEach(key => params[key] === undefined && delete params[key]);
+
       const response = await activitiesAPI.getActivities(user.company_id, params);
-      let data = response.data.activities || [];
-
-      // Sort data
-      data.sort((a, b) => {
-        let aVal, bVal;
-
-        if (sortBy === 'activity_date') {
-          aVal = a.activity_date ? new Date(a.activity_date) : (sortOrder === 'asc' ? new Date(8640000000000000) : new Date(0));
-          bVal = b.activity_date ? new Date(b.activity_date) : (sortOrder === 'asc' ? new Date(8640000000000000) : new Date(0));
-        } else if (sortBy === 'emissions_kgco2e') {
-          aVal = a.emissions_kgco2e != null ? a.emissions_kgco2e : (sortOrder === 'asc' ? Infinity : -Infinity);
-          bVal = b.emissions_kgco2e != null ? b.emissions_kgco2e : (sortOrder === 'asc' ? Infinity : -Infinity);
-        } else if (sortBy === 'activity_name') {
-          aVal = (a.activity_name || `${a.activity_type} - ${a.quantity} ${a.unit}`).toLowerCase();
-          bVal = (b.activity_name || `${b.activity_type} - ${b.quantity} ${b.unit}`).toLowerCase();
-        }
-
-        if (sortOrder === 'asc') {
-          return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
-        } else {
-          return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
-        }
-      });
-
+      const data = response.data.activities || [];
+      
       setActivities(data);
+      setTotalCount(response.data.total || 0);
     } catch (err) {
       setError('Failed to load activities');
       console.error('Error fetching activities:', err);
@@ -99,12 +94,9 @@ function ActivityList() {
     fetchActivities(); // Refresh the list
   };
 
-  const filteredActivities = activities.filter(activity =>
-    activity.activity_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    activity.activity_type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    activity.category?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    activity.description?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Filtering is now done server-side, but we keep this for client-side search if needed
+  // For now, activities are already filtered from the API
+  const filteredActivities = activities;
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -180,7 +172,7 @@ function ActivityList() {
               gap: isMobile ? '12px' : '20px',
             }}>
               <div style={styles.statCard}>
-                <div style={styles.statNumber}>{filteredActivities.length}</div>
+                <div style={styles.statNumber}>{totalCount}</div>
                 <div style={styles.statLabel}>Total Activities</div>
               </div>
               <div style={styles.statCard}>
@@ -232,21 +224,22 @@ function ActivityList() {
           <div style={styles.filtersHeader}>
             <h3 style={styles.filtersTitle}>🔍 Filter & Search</h3>
             <div style={styles.activeFilters}>
-              {(searchTerm || scopeFilter || categoryFilter) && (
-                <span style={styles.filterBadge}>
-                  {[
-                    searchTerm && 'Search',
-                    scopeFilter && `Scope ${scopeFilter}`,
-                    categoryFilter && categoryFilter
-                  ].filter(Boolean).join(', ')}
-                </span>
+              {(searchTerm || scopeFilter || categoryFilter || activityTypeFilter || startDate || endDate) && (
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {searchTerm && <span style={styles.filterBadge}>🔍 Search: {searchTerm}</span>}
+                  {scopeFilter && <span style={styles.filterBadge}>Scope {scopeFilter}</span>}
+                  {categoryFilter && <span style={styles.filterBadge}>Category: {categoryFilter}</span>}
+                  {activityTypeFilter && <span style={styles.filterBadge}>Type: {activityTypeFilter}</span>}
+                  {startDate && <span style={styles.filterBadge}>From: {startDate}</span>}
+                  {endDate && <span style={styles.filterBadge}>To: {endDate}</span>}
+                </div>
               )}
             </div>
           </div>
 
           <div style={{
             ...styles.filtersGrid,
-            gridTemplateColumns: isMobile ? '1fr' : isTablet ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+            gridTemplateColumns: isMobile ? '1fr' : isTablet ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
             gap: isMobile ? '16px' : '20px',
           }}>
             <div style={styles.filterGroup}>
@@ -279,18 +272,48 @@ function ActivityList() {
 
             <div style={styles.filterGroup}>
               <label style={styles.filterLabel}>Filter by Category</label>
-              <select
+              <input
+                type="text"
+                placeholder="Category name..."
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
                 style={styles.filterSelect}
-              >
-                <option value="">All Categories</option>
-                {[...new Set(activities.map(a => a.category).filter(Boolean))].map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
+              />
             </div>
 
+            <div style={styles.filterGroup}>
+              <label style={styles.filterLabel}>Activity Type</label>
+              <input
+                type="text"
+                placeholder="e.g. diesel, electricity..."
+                value={activityTypeFilter}
+                onChange={(e) => setActivityTypeFilter(e.target.value)}
+                style={styles.filterSelect}
+              />
+            </div>
+
+            <div style={styles.filterGroup}>
+              <label style={styles.filterLabel}>Start Date</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                style={styles.filterSelect}
+              />
+            </div>
+
+            <div style={styles.filterGroup}>
+              <label style={styles.filterLabel}>End Date</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                style={styles.filterSelect}
+              />
+            </div>
+          </div>
+
+          <div style={{ marginTop: '16px', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
             <div style={styles.filterGroup}>
               <label style={styles.filterLabel}>Sort By</label>
               <select
@@ -308,8 +331,31 @@ function ActivityList() {
                 <option value="emissions_kgco2e_asc">📉 Emissions (Low to High)</option>
                 <option value="activity_name_asc">📝 Name (A-Z)</option>
                 <option value="activity_name_desc">📝 Name (Z-A)</option>
+                <option value="created_at_desc">🕐 Created (Newest First)</option>
+                <option value="created_at_asc">🕐 Created (Oldest First)</option>
               </select>
             </div>
+
+            {(searchTerm || scopeFilter || categoryFilter || activityTypeFilter || startDate || endDate) && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setScopeFilter('');
+                  setCategoryFilter('');
+                  setActivityTypeFilter('');
+                  setStartDate('');
+                  setEndDate('');
+                }}
+                style={{
+                  ...styles.secondaryButton,
+                  padding: '10px 16px',
+                  fontSize: '12px',
+                  marginTop: '24px',
+                }}
+              >
+                🗑️ Clear Filters
+              </button>
+            )}
           </div>
         </div>
       </div>

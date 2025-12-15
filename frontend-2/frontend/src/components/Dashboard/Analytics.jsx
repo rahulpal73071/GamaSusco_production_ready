@@ -8,6 +8,7 @@ import ResourceSummary from './ResourceSummary';
 import EmissionLineChart from './LineChart';
 import EmissionPieChart from './PieChart';
 import { analyticsAPI, activitiesAPI } from '../../services/api';
+import ExcelJS from 'exceljs';
 import {
   ResponsiveContainer,
   LineChart, Line, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis,
@@ -489,31 +490,846 @@ function Analytics() {
     return activitiesData?.activities ? [...new Set(activitiesData.activities.map(a => a.activity_type))] : [];
   }, [activitiesData]);
 
+  const exportToExcel = useCallback(async () => {
+    if (!analyticsData || !activitiesData?.activities) {
+      alert('No data available to export');
+      return;
+    }
+
+    try {
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'GAMASUSCO AI Platform';
+      workbook.created = new Date();
+      workbook.modified = new Date();
+
+      // Define color schemes
+      const colors = {
+        headerBg: { argb: 'FF1e293b' }, // Dark slate
+        headerText: { argb: 'FFFFFFFF' }, // White
+        scope1: { argb: 'FFef4444' }, // Red
+        scope2: { argb: 'FFf59e0b' }, // Orange
+        scope3: { argb: 'FF8b5cf6' }, // Purple
+        primaryBg: { argb: 'FF667eea' }, // Purple-blue
+        secondaryBg: { argb: 'FFF8FAFC' }, // Light gray
+        success: { argb: 'FF10b981' }, // Green
+        warning: { argb: 'FFf59e0b' }, // Orange
+        info: { argb: 'FF3b82f6' }, // Blue
+      };
+
+      // Helper function to create styled header
+      const createHeaderRow = (worksheet, headers, startRow = 1) => {
+        headers.forEach((header, colIndex) => {
+          const cell = worksheet.getCell(startRow, colIndex + 1);
+          cell.value = header;
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: colors.headerBg
+          };
+          cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FF475569' } },
+            left: { style: 'thin', color: { argb: 'FF475569' } },
+            bottom: { style: 'thin', color: { argb: 'FF475569' } },
+            right: { style: 'thin', color: { argb: 'FF475569' } }
+          };
+        });
+        worksheet.getRow(startRow).height = 30;
+      };
+
+      // Helper function to style data rows
+      const styleDataRow = (worksheet, rowIndex, isEven = false) => {
+        const row = worksheet.getRow(rowIndex);
+        row.height = 20;
+        row.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: isEven ? colors.secondaryBg : { argb: 'FFFFFFFF' }
+        };
+        row.alignment = { vertical: 'middle', horizontal: 'left' };
+        row.font = { size: 11 };
+      };
+
+      // ========================================================================
+      // SHEET 1: SUMMARY & KPIs
+      // ========================================================================
+      const summarySheet = workbook.addWorksheet('Summary & KPIs');
+      
+      // Title
+      summarySheet.getCell('A1').value = 'EMISSIONS ANALYTICS REPORT';
+      summarySheet.getCell('A1').font = { bold: true, size: 16, color: colors.primaryBg };
+      summarySheet.mergeCells('A1:D1');
+      summarySheet.getRow(1).height = 35;
+
+      // Metadata
+      let currentRow = 3;
+      summarySheet.getCell(`A${currentRow}`).value = 'Generated:';
+      summarySheet.getCell(`B${currentRow}`).value = new Date().toLocaleString();
+      summarySheet.getCell(`A${currentRow + 1}`).value = 'Company ID:';
+      summarySheet.getCell(`B${currentRow + 1}`).value = companyId;
+      if (dateFrom && dateTo) {
+        summarySheet.getCell(`A${currentRow + 2}`).value = 'Date Range:';
+        summarySheet.getCell(`B${currentRow + 2}`).value = `${dateFrom} to ${dateTo}`;
+        currentRow += 3;
+      } else {
+        currentRow += 2;
+      }
+
+      currentRow += 2;
+
+      // KPIs Section
+      summarySheet.getCell(`A${currentRow}`).value = 'KEY PERFORMANCE INDICATORS (KPIs)';
+      summarySheet.getCell(`A${currentRow}`).font = { bold: true, size: 14, color: colors.primaryBg };
+      summarySheet.mergeCells(`A${currentRow}:C${currentRow}`);
+      currentRow += 2;
+
+      createHeaderRow(summarySheet, ['Metric', 'Value', 'Unit'], currentRow);
+      currentRow += 1;
+
+      // Handle scope totals units
+      const hasTonnesField = scopeBreakdown?.total_emissions_tonnes !== undefined;
+      const scope1TotalKg = scopeBreakdown?.scope_1?.total || 0;
+      const scope2TotalKg = scopeBreakdown?.scope_2?.total || 0;
+      const scope3TotalKg = scopeBreakdown?.scope_3?.total || 0;
+      const scope1Tonnes = hasTonnesField ? scope1TotalKg : (scope1TotalKg / 1000);
+      const scope2Tonnes = hasTonnesField ? scope2TotalKg : (scope2TotalKg / 1000);
+      const scope3Tonnes = hasTonnesField ? scope3TotalKg : (scope3TotalKg / 1000);
+
+      const kpiRows = [
+        ['Total Emissions', analyticsData?.total_emissions_tonnes?.toFixed(2) || '0.00', 't CO₂e'],
+        ['Total Emissions (kg)', analyticsData?.total_emissions_kg?.toFixed(2) || '0.00', 'kg CO₂e'],
+        ['Total Activities', analyticsData?.total_activities || 0, 'count'],
+        ['Average Emissions per Activity', analyticsData?.total_activities > 0 
+          ? (analyticsData.total_emissions_tonnes / analyticsData.total_activities).toFixed(2) 
+          : '0.00', 't CO₂e'],
+        ['Scope 1 Total', scope1Tonnes.toFixed(3), 't CO₂e'],
+        ['Scope 1 Percentage', ((scopeBreakdown?.scope_1?.percentage || 0) * 100).toFixed(2) + '%', '%'],
+        ['Scope 2 Total', scope2Tonnes.toFixed(3), 't CO₂e'],
+        ['Scope 2 Percentage', ((scopeBreakdown?.scope_2?.percentage || 0) * 100).toFixed(2) + '%', '%'],
+        ['Scope 3 Total', scope3Tonnes.toFixed(3), 't CO₂e'],
+        ['Scope 3 Percentage', ((scopeBreakdown?.scope_3?.percentage || 0) * 100).toFixed(2) + '%', '%'],
+        ['Peak Month', analyticsData?.peak_month || 'N/A', ''],
+      ];
+
+      kpiRows.forEach((row, index) => {
+        row.forEach((cellValue, colIndex) => {
+          const cell = summarySheet.getCell(currentRow, colIndex + 1);
+          cell.value = cellValue;
+          if (colIndex === 0) {
+            cell.font = { bold: true };
+          }
+        });
+        styleDataRow(summarySheet, currentRow, index % 2 === 0);
+        currentRow += 1;
+      });
+
+      // Set column widths
+      summarySheet.getColumn(1).width = 35;
+      summarySheet.getColumn(2).width = 20;
+      summarySheet.getColumn(3).width = 15;
+
+      // ========================================================================
+      // SHEET 2: SCOPE BREAKDOWN (Chart Data)
+      // ========================================================================
+      const scopeSheet = workbook.addWorksheet('Scope Breakdown');
+      
+      createHeaderRow(scopeSheet, ['Scope', 'Emissions (t CO₂e)', 'Percentage (%)', 'Total (kg CO₂e)'], 1);
+      
+      if (scopeBreakdown) {
+        const hasTonnesField2 = scopeBreakdown.total_emissions_tonnes !== undefined;
+        const scope1Total = scopeBreakdown.scope_1?.total || 0;
+        const scope2Total = scopeBreakdown.scope_2?.total || 0;
+        const scope3Total = scopeBreakdown.scope_3?.total || 0;
+        const scope1Tonnes2 = hasTonnesField2 ? scope1Total : (scope1Total / 1000);
+        const scope2Tonnes2 = hasTonnesField2 ? scope2Total : (scope2Total / 1000);
+        const scope3Tonnes2 = hasTonnesField2 ? scope3Total : (scope3Total / 1000);
+        const scope1Kg = hasTonnesField2 ? (scope1Total * 1000) : scope1Total;
+        const scope2Kg = hasTonnesField2 ? (scope2Total * 1000) : scope2Total;
+        const scope3Kg = hasTonnesField2 ? (scope3Total * 1000) : scope3Total;
+
+        const scopeRows = [
+          ['Scope 1', scope1Tonnes2, ((scopeBreakdown.scope_1?.percentage || 0) * 100), scope1Kg],
+          ['Scope 2', scope2Tonnes2, ((scopeBreakdown.scope_2?.percentage || 0) * 100), scope2Kg],
+          ['Scope 3', scope3Tonnes2, ((scopeBreakdown.scope_3?.percentage || 0) * 100), scope3Kg],
+        ];
+
+        scopeRows.forEach((row, index) => {
+          row.forEach((cellValue, colIndex) => {
+            const cell = scopeSheet.getCell(index + 2, colIndex + 1);
+            cell.value = typeof cellValue === 'number' ? Number(cellValue.toFixed(3)) : cellValue;
+            if (colIndex === 0) {
+              // Color code by scope
+              const scopeColors = [colors.scope1, colors.scope2, colors.scope3];
+              cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: scopeColors[index]
+              };
+              cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            }
+          });
+          styleDataRow(scopeSheet, index + 2, index % 2 === 0);
+        });
+      }
+
+      scopeSheet.getColumn(1).width = 15;
+      scopeSheet.getColumn(2).width = 20;
+      scopeSheet.getColumn(3).width = 18;
+      scopeSheet.getColumn(4).width = 20;
+
+      // ========================================================================
+      // SHEET 3: TIMELINE CHART DATA
+      // ========================================================================
+      const timelineSheet = workbook.addWorksheet('Timeline Data');
+      
+      createHeaderRow(timelineSheet, ['Period', 'Scope 1 (t CO₂e)', 'Scope 2 (t CO₂e)', 'Scope 3 (t CO₂e)', 'Total (t CO₂e)'], 1);
+
+      if (timelineData && timelineData.length > 0) {
+        timelineData.forEach((item, index) => {
+          const row = [
+            item.period || item.month || 'N/A',
+            Number(((item.scope_1 || 0) / 1000).toFixed(3)),
+            Number(((item.scope_2 || 0) / 1000).toFixed(3)),
+            Number(((item.scope_3 || 0) / 1000).toFixed(3)),
+            Number(((item.total || 0) / 1000).toFixed(3))
+          ];
+          row.forEach((cellValue, colIndex) => {
+            timelineSheet.getCell(index + 2, colIndex + 1).value = cellValue;
+          });
+          styleDataRow(timelineSheet, index + 2, index % 2 === 0);
+        });
+      }
+
+      timelineSheet.getColumn(1).width = 20;
+      timelineSheet.getColumn(2).width = 18;
+      timelineSheet.getColumn(3).width = 18;
+      timelineSheet.getColumn(4).width = 18;
+      timelineSheet.getColumn(5).width = 18;
+
+      // ========================================================================
+      // SHEET 4: TOP EMITTERS
+      // ========================================================================
+      const topEmittersSheet = workbook.addWorksheet('Top Emitters');
+      
+      createHeaderRow(topEmittersSheet, ['Rank', 'Activity Type', 'Emissions (t CO₂e)', 'Emissions (kg CO₂e)', 'Count', 'Category', 'Scope'], 1);
+
+      if (topEmitters && topEmitters.length > 0) {
+        topEmitters.forEach((emitter, index) => {
+          const row = [
+            index + 1,
+            emitter.activity_type || emitter.name || 'N/A',
+            Number((emitter.emissions_tonnes || (emitter.emissions_kgco2e || 0) / 1000).toFixed(3)),
+            Number((emitter.emissions_kgco2e || 0).toFixed(2)),
+            emitter.count || 0,
+            emitter.category || 'N/A',
+            emitter.scope || 'N/A'
+          ];
+          row.forEach((cellValue, colIndex) => {
+            topEmittersSheet.getCell(index + 2, colIndex + 1).value = cellValue;
+          });
+          styleDataRow(topEmittersSheet, index + 2, index % 2 === 0);
+        });
+      }
+
+      topEmittersSheet.getColumn(1).width = 8;
+      topEmittersSheet.getColumn(2).width = 25;
+      topEmittersSheet.getColumn(3).width = 18;
+      topEmittersSheet.getColumn(4).width = 20;
+      topEmittersSheet.getColumn(5).width = 10;
+      topEmittersSheet.getColumn(6).width = 20;
+      topEmittersSheet.getColumn(7).width = 12;
+
+      // ========================================================================
+      // SHEET 5: CATEGORY BREAKDOWN
+      // ========================================================================
+      const categorySheet = workbook.addWorksheet('Category Breakdown');
+      
+      createHeaderRow(categorySheet, ['Category', 'Scope', 'Emissions (kg CO₂e)', 'Emissions (t CO₂e)', 'Percentage (%)', 'Activity Count'], 1);
+
+      if (scopeBreakdown) {
+        const hasTonnesField3 = scopeBreakdown.total_emissions_tonnes !== undefined;
+        let rowIndex = 2;
+
+        // Scope 1 categories
+        if (scopeBreakdown.scope_1?.categories && scopeBreakdown.scope_1.categories.length > 0) {
+          scopeBreakdown.scope_1.categories.forEach(cat => {
+            const valueKg = hasTonnesField3 ? (cat.value * 1000) : cat.value;
+            const valueTonnes = hasTonnesField3 ? cat.value : (cat.value / 1000);
+            const row = [
+              cat.name || 'N/A',
+              'Scope 1',
+              Number(valueKg.toFixed(2)),
+              Number(valueTonnes.toFixed(3)),
+              Number((cat.percentage || 0).toFixed(2)),
+              cat.activity_count || 0
+            ];
+            row.forEach((cellValue, colIndex) => {
+              const cell = categorySheet.getCell(rowIndex, colIndex + 1);
+              cell.value = cellValue;
+              if (colIndex === 1) {
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: colors.scope1 };
+                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+              }
+            });
+            styleDataRow(categorySheet, rowIndex, rowIndex % 2 === 0);
+            rowIndex += 1;
+          });
+        }
+
+        // Scope 2 categories
+        if (scopeBreakdown.scope_2?.categories && scopeBreakdown.scope_2.categories.length > 0) {
+          scopeBreakdown.scope_2.categories.forEach(cat => {
+            const valueKg = hasTonnesField3 ? (cat.value * 1000) : cat.value;
+            const valueTonnes = hasTonnesField3 ? cat.value : (cat.value / 1000);
+            const row = [
+              cat.name || 'N/A',
+              'Scope 2',
+              Number(valueKg.toFixed(2)),
+              Number(valueTonnes.toFixed(3)),
+              Number((cat.percentage || 0).toFixed(2)),
+              cat.activity_count || 0
+            ];
+            row.forEach((cellValue, colIndex) => {
+              const cell = categorySheet.getCell(rowIndex, colIndex + 1);
+              cell.value = cellValue;
+              if (colIndex === 1) {
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: colors.scope2 };
+                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+              }
+            });
+            styleDataRow(categorySheet, rowIndex, rowIndex % 2 === 0);
+            rowIndex += 1;
+          });
+        }
+
+        // Scope 3 categories
+        if (scopeBreakdown.scope_3?.categories && scopeBreakdown.scope_3.categories.length > 0) {
+          scopeBreakdown.scope_3.categories.forEach(cat => {
+            const valueKg = hasTonnesField3 ? (cat.value * 1000) : cat.value;
+            const valueTonnes = hasTonnesField3 ? cat.value : (cat.value / 1000);
+            const row = [
+              cat.name || 'N/A',
+              'Scope 3',
+              Number(valueKg.toFixed(2)),
+              Number(valueTonnes.toFixed(3)),
+              Number((cat.percentage || 0).toFixed(2)),
+              cat.activity_count || 0
+            ];
+            row.forEach((cellValue, colIndex) => {
+              const cell = categorySheet.getCell(rowIndex, colIndex + 1);
+              cell.value = cellValue;
+              if (colIndex === 1) {
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: colors.scope3 };
+                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+              }
+            });
+            styleDataRow(categorySheet, rowIndex, rowIndex % 2 === 0);
+            rowIndex += 1;
+          });
+        }
+      }
+
+      categorySheet.getColumn(1).width = 25;
+      categorySheet.getColumn(2).width = 12;
+      categorySheet.getColumn(3).width = 20;
+      categorySheet.getColumn(4).width = 18;
+      categorySheet.getColumn(5).width = 18;
+      categorySheet.getColumn(6).width = 15;
+
+      // ========================================================================
+      // SHEET 6: HEATMAP DATA
+      // ========================================================================
+      if (activitiesData?.activities && activitiesData.activities.length > 0) {
+        const heatmap = {};
+        activitiesData.activities.forEach(activity => {
+          if (!activity.activity_date) return;
+          const date = new Date(activity.activity_date);
+          let period;
+          if (heatmapPeriod === 'week') {
+            const startOfWeek = new Date(date);
+            startOfWeek.setDate(date.getDate() - date.getDay());
+            period = startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          } else {
+            period = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+          }
+          const type = activity.activity_type || 'Other';
+          if (!heatmap[period]) heatmap[period] = {};
+          if (!heatmap[period][type]) heatmap[period][type] = 0;
+          heatmap[period][type] += activity.emissions_kgco2e || 0;
+        });
+        
+        const heatmapData = Object.entries(heatmap).map(([period, types]) => ({ month: period, ...types }));
+        heatmapData.sort((a, b) => new Date(b.month) - new Date(a.month));
+        
+        if (heatmapData.length > 0) {
+          const heatmapSheet = workbook.addWorksheet('Heatmap Data');
+          
+          const activityTypes = new Set();
+          heatmapData.forEach(row => {
+            Object.keys(row).forEach(key => {
+              if (key !== 'month') activityTypes.add(key);
+            });
+          });
+          
+          const headers = ['Month', ...Array.from(activityTypes)];
+          createHeaderRow(heatmapSheet, headers, 1);
+          
+          heatmapData.forEach((row, index) => {
+            const dataRow = [row.month || 'N/A', ...Array.from(activityTypes).map(type => Number((row[type] || 0).toFixed(2)))];
+            dataRow.forEach((cellValue, colIndex) => {
+              heatmapSheet.getCell(index + 2, colIndex + 1).value = cellValue;
+            });
+            styleDataRow(heatmapSheet, index + 2, index % 2 === 0);
+          });
+
+          heatmapSheet.getColumn(1).width = 20;
+          Array.from(activityTypes).forEach((_, index) => {
+            heatmapSheet.getColumn(index + 2).width = 18;
+          });
+        }
+      }
+
+      // ========================================================================
+      // SHEET 7: ACTIVITY DETAILS
+      // ========================================================================
+      const activitiesSheet = workbook.addWorksheet('Activity Details');
+      
+      const activityHeaders = [
+        'ID', 'Activity Name', 'Activity Type', 'Quantity', 'Unit',
+        'Emissions (kg CO₂e)', 'Emissions (t CO₂e)', 'Scope', 'Category',
+        'Activity Date', 'Location', 'Notes'
+      ];
+      createHeaderRow(activitiesSheet, activityHeaders, 1);
+
+      if (activitiesData?.activities && activitiesData.activities.length > 0) {
+        activitiesData.activities.forEach((activity, index) => {
+          const row = [
+            activity.id || '',
+            activity.activity_name || `${activity.activity_type || ''} - ${activity.quantity || ''} ${activity.unit || ''}`,
+            activity.activity_type || '',
+            activity.quantity || 0,
+            activity.unit || '',
+            Number((activity.emissions_kgco2e || 0).toFixed(2)),
+            Number(((activity.emissions_kgco2e || 0) / 1000).toFixed(3)),
+            activity.scope || '',
+            activity.category || 'N/A',
+            activity.activity_date ? new Date(activity.activity_date).toLocaleDateString() : '',
+            activity.location || '',
+            activity.notes || ''
+          ];
+          row.forEach((cellValue, colIndex) => {
+            activitiesSheet.getCell(index + 2, colIndex + 1).value = cellValue;
+          });
+          styleDataRow(activitiesSheet, index + 2, index % 2 === 0);
+        });
+      }
+
+      activitiesSheet.getColumn(1).width = 8;
+      activitiesSheet.getColumn(2).width = 30;
+      activitiesSheet.getColumn(3).width = 20;
+      activitiesSheet.getColumn(4).width = 12;
+      activitiesSheet.getColumn(5).width = 10;
+      activitiesSheet.getColumn(6).width = 18;
+      activitiesSheet.getColumn(7).width = 18;
+      activitiesSheet.getColumn(8).width = 12;
+      activitiesSheet.getColumn(9).width = 20;
+      activitiesSheet.getColumn(10).width = 15;
+      activitiesSheet.getColumn(11).width = 20;
+      activitiesSheet.getColumn(12).width = 30;
+
+      // ========================================================================
+      // SHEET: CHART INSTRUCTIONS (Optional - helps users create charts)
+      // ========================================================================
+      const chartInstructionsSheet = workbook.addWorksheet('Chart Instructions');
+      chartInstructionsSheet.getCell('A1').value = 'CHART CREATION INSTRUCTIONS';
+      chartInstructionsSheet.getCell('A1').font = { bold: true, size: 14, color: colors.primaryBg };
+      chartInstructionsSheet.mergeCells('A1:D1');
+      chartInstructionsSheet.getRow(1).height = 30;
+
+      const instructions = [
+        '',
+        'This workbook contains all chart data in separate sheets:',
+        '',
+        '1. Scope Breakdown - Use this data to create a Pie or Donut chart showing Scope 1, 2, 3 distribution',
+        '2. Timeline Data - Use this data to create a Line or Area chart showing emission trends over time',
+        '3. Top Emitters - Use this data to create a Bar chart showing highest emission sources',
+        '4. Category Breakdown - Use this data to create a Stacked Bar chart by scope',
+        '5. Heatmap Data - Use this data to create a Heatmap visualization',
+        '',
+        'To create charts in Excel:',
+        '1. Select the data range from any sheet',
+        '2. Go to Insert > Charts',
+        '3. Choose your preferred chart type',
+        '4. Customize colors and labels as needed',
+        '',
+        'Chart data is ready to use - just select and insert chart!'
+      ];
+
+      instructions.forEach((text, index) => {
+        const cell = chartInstructionsSheet.getCell(`A${index + 3}`);
+        cell.value = text;
+        if (index === 0 || index === 2 || index === 9) {
+          cell.font = { bold: true };
+        }
+      });
+
+      chartInstructionsSheet.getColumn(1).width = 80;
+      chartInstructionsSheet.getColumn(2).width = 10;
+
+      // Generate Excel file
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `emissions-analytics-styled-${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.click();
+      setShowExportMenu(false);
+    } catch (error) {
+      console.error('Error generating Excel file:', error);
+      alert('Failed to generate Excel file. Please try again.');
+    }
+  }, [analyticsData, activitiesData, timelineData, topEmitters, scopeBreakdown, heatmapPeriod, companyId, dateFrom, dateTo]);
+
   const exportToCSV = useCallback(() => {
-    if (!analyticsData || !activitiesData?.activities || activitiesData.activities.length === 0) return;
-    const csvData = activitiesData.activities.map(activity => ({
-      'Activity Name': activity.activity_name || `${activity.activity_type} - ${activity.quantity || ''} ${activity.unit || ''}`,
-      'Type': activity.activity_type,
-      'Quantity': activity.quantity || 0,
-      'Unit': activity.unit || '',
-      'Emissions (kgCO₂e)': activity.emissions_kgco2e?.toFixed(2) || '0.00',
-      'Scope': activity.scope || '',
-      'Category': activity.category || 'N/A',
-      'Date': activity.activity_date ? new Date(activity.activity_date).toLocaleDateString() : 'N/A'
-    }));
+    if (!analyticsData || !activitiesData?.activities) {
+      alert('No data available to export');
+      return;
+    }
 
-    const csvContent = [
-      Object.keys(csvData[0]).join(','),
-      ...csvData.map(row => Object.values(row).map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))
-    ].join('\n');
+    const escapeCSV = (val) => {
+      if (val === null || val === undefined) return '';
+      const str = String(val);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const csvRows = [];
+
+    // ========================================================================
+    // SECTION 1: METADATA & REPORT INFO
+    // ========================================================================
+    csvRows.push('EMISSIONS ANALYTICS REPORT');
+    csvRows.push(`Generated: ${new Date().toLocaleString()}`);
+    csvRows.push(`Company ID: ${companyId}`);
+    if (dateFrom && dateTo) {
+      csvRows.push(`Date Range: ${dateFrom} to ${dateTo}`);
+    }
+    csvRows.push(''); // Blank row
+
+    // ========================================================================
+    // SECTION 2: KPIs SUMMARY
+    // ========================================================================
+    csvRows.push('KEY PERFORMANCE INDICATORS (KPIs)');
+    csvRows.push('');
+    
+    // Handle scope totals units (could be kg or tonnes)
+    const hasTonnesField = scopeBreakdown?.total_emissions_tonnes !== undefined;
+    const scope1TotalKg = scopeBreakdown?.scope_1?.total || 0;
+    const scope2TotalKg = scopeBreakdown?.scope_2?.total || 0;
+    const scope3TotalKg = scopeBreakdown?.scope_3?.total || 0;
+    
+    // Convert to tonnes if needed
+    const scope1Tonnes = hasTonnesField ? (scope1TotalKg) : (scope1TotalKg / 1000);
+    const scope2Tonnes = hasTonnesField ? (scope2TotalKg) : (scope2TotalKg / 1000);
+    const scope3Tonnes = hasTonnesField ? (scope3TotalKg) : (scope3TotalKg / 1000);
+
+    const kpiData = [
+      ['Metric', 'Value', 'Unit'],
+      ['Total Emissions', analyticsData?.total_emissions_tonnes?.toFixed(2) || '0.00', 't CO₂e'],
+      ['Total Emissions (kg)', analyticsData?.total_emissions_kg?.toFixed(2) || '0.00', 'kg CO₂e'],
+      ['Total Activities', analyticsData?.total_activities || 0, 'count'],
+      ['Average Emissions per Activity', analyticsData?.total_activities > 0 
+        ? (analyticsData.total_emissions_tonnes / analyticsData.total_activities).toFixed(2) 
+        : '0.00', 't CO₂e'],
+      ['Scope 1 Total', scope1Tonnes.toFixed(3), 't CO₂e'],
+      ['Scope 1 Percentage', ((scopeBreakdown?.scope_1?.percentage || 0) * 100).toFixed(2), '%'],
+      ['Scope 2 Total', scope2Tonnes.toFixed(3), 't CO₂e'],
+      ['Scope 2 Percentage', ((scopeBreakdown?.scope_2?.percentage || 0) * 100).toFixed(2), '%'],
+      ['Scope 3 Total', scope3Tonnes.toFixed(3), 't CO₂e'],
+      ['Scope 3 Percentage', ((scopeBreakdown?.scope_3?.percentage || 0) * 100).toFixed(2), '%'],
+      ['Peak Month', analyticsData?.peak_month || 'N/A', ''],
+    ];
+
+    kpiData.forEach(row => {
+      csvRows.push(row.map(escapeCSV).join(','));
+    });
+    csvRows.push(''); // Blank row
+
+    // ========================================================================
+    // SECTION 3: SCOPE BREAKDOWN CHART DATA
+    // ========================================================================
+    csvRows.push('SCOPE BREAKDOWN (Chart Data)');
+    csvRows.push('');
+    csvRows.push(['Scope', 'Emissions (t CO₂e)', 'Percentage (%)', 'Total (kg CO₂e)'].map(escapeCSV).join(','));
+    
+    if (scopeBreakdown) {
+      // Handle units: scope_1.total could be in kg or tonnes depending on API endpoint
+      // Check if total_emissions_tonnes exists to determine units
+      const hasTonnesField = scopeBreakdown.total_emissions_tonnes !== undefined;
+      
+      const scope1Total = scopeBreakdown.scope_1?.total || 0;
+      const scope2Total = scopeBreakdown.scope_2?.total || 0;
+      const scope3Total = scopeBreakdown.scope_3?.total || 0;
+      
+      // Convert to tonnes (if in kg, divide by 1000; if already in tonnes, use as-is)
+      const scope1Tonnes = hasTonnesField ? scope1Total : (scope1Total / 1000);
+      const scope2Tonnes = hasTonnesField ? scope2Total : (scope2Total / 1000);
+      const scope3Tonnes = hasTonnesField ? scope3Total : (scope3Total / 1000);
+      
+      // Convert to kg for display
+      const scope1Kg = hasTonnesField ? (scope1Total * 1000) : scope1Total;
+      const scope2Kg = hasTonnesField ? (scope2Total * 1000) : scope2Total;
+      const scope3Kg = hasTonnesField ? (scope3Total * 1000) : scope3Total;
+      
+      csvRows.push([
+        'Scope 1',
+        scope1Tonnes.toFixed(3),
+        ((scopeBreakdown.scope_1?.percentage || 0) * 100).toFixed(2),
+        scope1Kg.toFixed(2)
+      ].map(escapeCSV).join(','));
+      
+      csvRows.push([
+        'Scope 2',
+        scope2Tonnes.toFixed(3),
+        ((scopeBreakdown.scope_2?.percentage || 0) * 100).toFixed(2),
+        scope2Kg.toFixed(2)
+      ].map(escapeCSV).join(','));
+
+      csvRows.push([
+        'Scope 3',
+        scope3Tonnes.toFixed(3),
+        ((scopeBreakdown.scope_3?.percentage || 0) * 100).toFixed(2),
+        scope3Kg.toFixed(2)
+      ].map(escapeCSV).join(','));
+    }
+    csvRows.push(''); // Blank row
+
+    // ========================================================================
+    // SECTION 4: TIMELINE CHART DATA (Monthly Emissions)
+    // ========================================================================
+    csvRows.push('TIMELINE DATA (Monthly Emissions Trend)');
+    csvRows.push('');
+    csvRows.push(['Period', 'Scope 1 (t CO₂e)', 'Scope 2 (t CO₂e)', 'Scope 3 (t CO₂e)', 'Total (t CO₂e)'].map(escapeCSV).join(','));
+    
+    if (timelineData && timelineData.length > 0) {
+      timelineData.forEach(item => {
+        csvRows.push([
+          item.period || item.month || 'N/A',
+          ((item.scope_1 || 0) / 1000).toFixed(3),
+          ((item.scope_2 || 0) / 1000).toFixed(3),
+          ((item.scope_3 || 0) / 1000).toFixed(3),
+          ((item.total || 0) / 1000).toFixed(3)
+        ].map(escapeCSV).join(','));
+      });
+    } else {
+      csvRows.push(['No timeline data available', '', '', '', ''].map(escapeCSV).join(','));
+    }
+    csvRows.push(''); // Blank row
+
+    // ========================================================================
+    // SECTION 5: TOP EMITTERS CHART DATA
+    // ========================================================================
+    csvRows.push('TOP EMITTERS (Highest Emission Sources)');
+    csvRows.push('');
+    csvRows.push(['Rank', 'Activity Type', 'Emissions (t CO₂e)', 'Emissions (kg CO₂e)', 'Count', 'Category', 'Scope'].map(escapeCSV).join(','));
+    
+    if (topEmitters && topEmitters.length > 0) {
+      topEmitters.forEach((emitter, index) => {
+        csvRows.push([
+          index + 1,
+          emitter.activity_type || 'N/A',
+          (emitter.emissions_tonnes || (emitter.emissions_kgco2e || 0) / 1000).toFixed(3),
+          (emitter.emissions_kgco2e || 0).toFixed(2),
+          emitter.count || 0,
+          emitter.category || 'N/A',
+          emitter.scope || 'N/A'
+        ].map(escapeCSV).join(','));
+      });
+    } else {
+      csvRows.push(['No top emitters data available', '', '', '', '', '', ''].map(escapeCSV).join(','));
+    }
+    csvRows.push(''); // Blank row
+
+    // ========================================================================
+    // SECTION 6: CATEGORY BREAKDOWN (from Scope Breakdown)
+    // ========================================================================
+    csvRows.push('CATEGORY BREAKDOWN');
+    csvRows.push('');
+    csvRows.push(['Category', 'Scope', 'Emissions (kg CO₂e)', 'Emissions (t CO₂e)', 'Percentage (%)', 'Activity Count'].map(escapeCSV).join(','));
+    
+    if (scopeBreakdown) {
+      // Determine unit for category values (could be kg or tonnes depending on API)
+      const hasTonnesField = scopeBreakdown.total_emissions_tonnes !== undefined;
+      
+      // Scope 1 categories
+      if (scopeBreakdown.scope_1?.categories && scopeBreakdown.scope_1.categories.length > 0) {
+        scopeBreakdown.scope_1.categories.forEach(cat => {
+          const valueKg = hasTonnesField ? (cat.value * 1000) : cat.value;
+          const valueTonnes = hasTonnesField ? cat.value : (cat.value / 1000);
+          csvRows.push([
+            cat.name || 'N/A',
+            'Scope 1',
+            valueKg.toFixed(2),
+            valueTonnes.toFixed(3),
+            cat.percentage?.toFixed(2) || '0.00',
+            cat.activity_count || 0
+          ].map(escapeCSV).join(','));
+        });
+      }
+
+      // Scope 2 categories
+      if (scopeBreakdown.scope_2?.categories && scopeBreakdown.scope_2.categories.length > 0) {
+        scopeBreakdown.scope_2.categories.forEach(cat => {
+          const valueKg = hasTonnesField ? (cat.value * 1000) : cat.value;
+          const valueTonnes = hasTonnesField ? cat.value : (cat.value / 1000);
+          csvRows.push([
+            cat.name || 'N/A',
+            'Scope 2',
+            valueKg.toFixed(2),
+            valueTonnes.toFixed(3),
+            cat.percentage?.toFixed(2) || '0.00',
+            cat.activity_count || 0
+          ].map(escapeCSV).join(','));
+        });
+      }
+
+      // Scope 3 categories
+      if (scopeBreakdown.scope_3?.categories && scopeBreakdown.scope_3.categories.length > 0) {
+        scopeBreakdown.scope_3.categories.forEach(cat => {
+          const valueKg = hasTonnesField ? (cat.value * 1000) : cat.value;
+          const valueTonnes = hasTonnesField ? cat.value : (cat.value / 1000);
+          csvRows.push([
+            cat.name || 'N/A',
+            'Scope 3',
+            valueKg.toFixed(2),
+            valueTonnes.toFixed(3),
+            cat.percentage?.toFixed(2) || '0.00',
+            cat.activity_count || 0
+          ].map(escapeCSV).join(','));
+        });
+      }
+    }
+    csvRows.push(''); // Blank row
+
+    // ========================================================================
+    // SECTION 7: HEATMAP DATA (if available)
+    // ========================================================================
+    // Compute heatmap data inline to avoid dependency issues
+    if (activitiesData?.activities && activitiesData.activities.length > 0) {
+      const heatmap = {};
+      activitiesData.activities.forEach(activity => {
+        if (!activity.activity_date) return;
+        const date = new Date(activity.activity_date);
+        let period;
+        if (heatmapPeriod === 'week') {
+          const startOfWeek = new Date(date);
+          startOfWeek.setDate(date.getDate() - date.getDay());
+          period = startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        } else {
+          period = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        }
+        const type = activity.activity_type || 'Other';
+        if (!heatmap[period]) heatmap[period] = {};
+        if (!heatmap[period][type]) heatmap[period][type] = 0;
+        heatmap[period][type] += activity.emissions_kgco2e || 0;
+      });
+      
+      const heatmapData = Object.entries(heatmap).map(([period, types]) => ({ month: period, ...types }));
+      heatmapData.sort((a, b) => new Date(b.month) - new Date(a.month));
+      
+      if (heatmapData.length > 0) {
+        csvRows.push('HEATMAP DATA (Activity Types by Month)');
+        csvRows.push('');
+        
+        // Get all unique activity types
+        const activityTypes = new Set();
+        heatmapData.forEach(row => {
+          Object.keys(row).forEach(key => {
+            if (key !== 'month') activityTypes.add(key);
+          });
+        });
+        
+        const headerRow = ['Month', ...Array.from(activityTypes)].map(escapeCSV);
+        csvRows.push(headerRow.join(','));
+        
+        heatmapData.forEach(row => {
+          const dataRow = [row.month || 'N/A', ...Array.from(activityTypes).map(type => (row[type] || 0).toFixed(2))];
+          csvRows.push(dataRow.map(escapeCSV).join(','));
+        });
+        csvRows.push(''); // Blank row
+      }
+    }
+
+    // ========================================================================
+    // SECTION 8: ALL ACTIVITY DETAILS
+    // ========================================================================
+    csvRows.push('DETAILED ACTIVITY RECORDS');
+    csvRows.push('');
+    
+    if (activitiesData?.activities && activitiesData.activities.length > 0) {
+      const activityHeaders = [
+        'ID', 'Activity Name', 'Activity Type', 'Description', 'Quantity', 'Unit',
+        'Emissions (kg CO₂e)', 'Emissions (t CO₂e)', 'Emission Factor', 'Emission Factor Unit',
+        'Scope', 'Scope Number', 'Category', 'Subcategory',
+        'Calculation Method', 'Data Quality', 'Confidence', 'Source',
+        'Activity Date', 'Created At', 'Created By', 'Location',
+        'From Location', 'To Location', 'Source Document', 'Reporting Period',
+        'Is Verified', 'Notes'
+      ];
+      csvRows.push(activityHeaders.map(escapeCSV).join(','));
+
+      activitiesData.activities.forEach(activity => {
+        csvRows.push([
+          activity.id || '',
+          activity.activity_name || `${activity.activity_type || ''} - ${activity.quantity || ''} ${activity.unit || ''}`,
+          activity.activity_type || '',
+          activity.description || '',
+          activity.quantity || 0,
+          activity.unit || '',
+          (activity.emissions_kgco2e || 0).toFixed(2),
+          ((activity.emissions_kgco2e || 0) / 1000).toFixed(3),
+          activity.emission_factor || '',
+          activity.emission_factor_unit || '',
+          activity.scope || '',
+          activity.scope_number || '',
+          activity.category || 'N/A',
+          activity.subcategory || '',
+          activity.calculation_method || '',
+          activity.data_quality || '',
+          activity.confidence || '',
+          activity.source || '',
+          activity.activity_date ? new Date(activity.activity_date).toLocaleDateString() : '',
+          activity.created_at ? new Date(activity.created_at).toLocaleDateString() : '',
+          activity.created_by || '',
+          activity.location || '',
+          activity.from_location || '',
+          activity.to_location || '',
+          activity.source_document || '',
+          activity.reporting_period || '',
+          activity.is_verified ? 'Yes' : 'No',
+          activity.notes || ''
+        ].map(escapeCSV).join(','));
+      });
+    } else {
+      csvRows.push(['No activity records available'].map(escapeCSV).join(','));
+    }
+
+    // ========================================================================
+    // CREATE AND DOWNLOAD CSV
+    // ========================================================================
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' }); // BOM for Excel UTF-8 support
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `emissions-analytics-${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `emissions-analytics-comprehensive-${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
     setShowExportMenu(false);
-  }, [analyticsData, activitiesData]);
+  }, [analyticsData, activitiesData, timelineData, topEmitters, scopeBreakdown, heatmapPeriod, companyId, dateFrom, dateTo]);
 
   const exportToJSON = useCallback(() => {
     if (!analyticsData || !activitiesData?.activities) return;
@@ -674,6 +1490,7 @@ function Analytics() {
                 <button onClick={toggleExportMenu} style={styles.exportButton}>Export</button>
                 {showExportMenu && (
                   <div style={styles.exportMenu}>
+                    <button onClick={exportToExcel} style={styles.exportMenuItem}>Export as Excel (Styled with Charts)</button>
                     <button onClick={exportToCSV} style={styles.exportMenuItem}>Export as CSV</button>
                     <button onClick={exportToJSON} style={styles.exportMenuItem}>Export as JSON</button>
                   </div>

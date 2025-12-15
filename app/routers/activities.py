@@ -8,6 +8,7 @@ WITH authentication and company data isolation
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, and_, case, func, String
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 from datetime import datetime, timezone
@@ -294,24 +295,33 @@ async def get_activities(
         company_id: int,
         current_user: User = Depends(get_current_user),  # ← AUTHENTICATION REQUIRED
         scope: Optional[str] = Query(None, description="Filter by scope(s) - comma-separated (1,2,3)"),
-        category: Optional[str] = Query(None, description="Filter by category"),
-        start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-        end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+        category: Optional[str] = Query(None, description="Filter by category (exact match or comma-separated)"),
+        activity_type: Optional[str] = Query(None, description="Filter by activity type (comma-separated)"),
+        search: Optional[str] = Query(None, description="Search in activity name, description, and type"),
+        start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD) - filters by activity_date"),
+        end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD) - filters by activity_date"),
+        sort_by: Optional[str] = Query("activity_date", description="Sort field: activity_date, emissions_kgco2e, activity_name, created_at"),
+        sort_order: Optional[str] = Query("desc", description="Sort order: asc or desc"),
         skip: int = Query(0, ge=0, description="Number of records to skip"),
         limit: int = Query(50, ge=1, le=1000, description="Number of records to return"),
         db: Session = Depends(get_db)
 ):
     """
-    📋 Get emission activities with filtering (SECURED)
+    📋 Get emission activities with filtering and sorting (SECURED)
 
     **Authentication Required:** JWT token
     **Authorization:** User must belong to the company
 
     **Filters:**
-    - Scope (1, 2, or 3)
-    - Category
-    - Date range
-    - Pagination
+    - Scope (comma-separated: "1,2,3")
+    - Category (exact match or comma-separated)
+    - Activity Type (comma-separated)
+    - Search (searches in name, description, type)
+    - Date range (start_date, end_date)
+
+    **Sorting:**
+    - sort_by: activity_date, emissions_kgco2e, activity_name, created_at
+    - sort_order: asc or desc
     """
 
     # SECURITY CHECK
@@ -330,22 +340,124 @@ async def get_activities(
             query = query.filter(EmissionActivity.scope_number.in_(scope_list))
 
     if category:
-        query = query.filter(EmissionActivity.category.ilike(f"%{category}%"))
+        # Handle comma-separated categories or single category
+        category_list = [c.strip() for c in category.split(',') if c.strip()]
+        if category_list:
+            # Use exact match for better performance, with OR logic for multiple categories
+            query = query.filter(or_(*[EmissionActivity.category.ilike(f"%{cat}%") for cat in category_list]))
+
+    if activity_type:
+        # Handle comma-separated activity types
+        activity_type_list = [at.strip() for at in activity_type.split(',') if at.strip()]
+        if activity_type_list:
+            query = query.filter(or_(*[EmissionActivity.activity_type.ilike(f"%{at}%") for at in activity_type_list]))
+
+    if search:
+        # Search across multiple fields
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                EmissionActivity.activity_name.ilike(search_term),
+                EmissionActivity.activity_type.ilike(search_term),
+                EmissionActivity.description.ilike(search_term),
+                EmissionActivity.category.ilike(search_term)
+            )
+        )
 
     if start_date:
-        query = query.filter(EmissionActivity.activity_date >= datetime.fromisoformat(start_date))
+        try:
+            start_dt = datetime.fromisoformat(start_date)
+            # Use activity_date if available, otherwise use created_at
+            query = query.filter(
+                or_(
+                    and_(EmissionActivity.activity_date.isnot(None), EmissionActivity.activity_date >= start_dt),
+                    and_(EmissionActivity.activity_date.is_(None), EmissionActivity.created_at >= start_dt)
+                )
+            )
+        except ValueError:
+            pass  # Invalid date format, skip filter
 
     if end_date:
-        query = query.filter(EmissionActivity.activity_date <= datetime.fromisoformat(end_date))
+        try:
+            end_dt = datetime.fromisoformat(end_date)
+            # Include time component to cover entire day
+            end_dt = end_dt.replace(hour=23, minute=59, second=59)
+            # Use activity_date if available, otherwise use created_at
+            query = query.filter(
+                or_(
+                    and_(EmissionActivity.activity_date.isnot(None), EmissionActivity.activity_date <= end_dt),
+                    and_(EmissionActivity.activity_date.is_(None), EmissionActivity.created_at <= end_dt)
+                )
+            )
+        except ValueError:
+            pass  # Invalid date format, skip filter
 
-    # Get total count
+    # Get total count BEFORE sorting/pagination
     total = query.count()
 
-    # Get paginated results
-    activities = query.order_by(
-        EmissionActivity.activity_date.desc(),
-        EmissionActivity.created_at.desc()
-    ).offset(skip).limit(limit).all()
+    # Apply sorting
+    valid_sort_fields = {
+        "activity_date": EmissionActivity.activity_date,
+        "emissions_kgco2e": EmissionActivity.emissions_kgco2e,
+        "activity_name": EmissionActivity.activity_name,
+        "created_at": EmissionActivity.created_at
+    }
+
+    sort_order_lower = sort_order.lower() if sort_order else "desc"
+    
+    # Validate sort_by parameter
+    if sort_by not in valid_sort_fields:
+        sort_by = "activity_date"
+    
+    sort_field = valid_sort_fields[sort_by]
+
+    # Build order_by with proper null handling for each field type
+    if sort_by == "activity_date":
+        # For activity_date, use created_at as fallback for null values
+        order_by_field = case(
+            (EmissionActivity.activity_date.isnot(None), EmissionActivity.activity_date),
+            else_=EmissionActivity.created_at
+        )
+        # Apply sorting
+        if sort_order_lower == "asc":
+            query = query.order_by(order_by_field.asc(), EmissionActivity.created_at.desc())
+        else:
+            query = query.order_by(order_by_field.desc(), EmissionActivity.created_at.desc())
+            
+    elif sort_by == "emissions_kgco2e":
+        # For emissions, null values should go last in both ascending and descending
+        # Use COALESCE with a very large number for asc (nulls last) or -1 for desc (nulls last)
+        if sort_order_lower == "asc":
+            # For asc: use a very large number so nulls go to the end
+            query = query.order_by(
+                func.coalesce(EmissionActivity.emissions_kgco2e, 999999999).asc(),
+                EmissionActivity.created_at.desc()
+            )
+        else:
+            # For desc: use -1 so nulls (coalesced to -1) go last (after all positive values)
+            query = query.order_by(
+                func.coalesce(EmissionActivity.emissions_kgco2e, -1).desc(),
+                EmissionActivity.created_at.desc()
+            )
+            
+    elif sort_by == "activity_name":
+        # For activity_name, use COALESCE to handle nulls
+        # Simple fallback: use activity_type if activity_name is null
+        fallback_name = func.coalesce(EmissionActivity.activity_name, EmissionActivity.activity_type, '')
+        if sort_order_lower == "asc":
+            query = query.order_by(fallback_name.asc(), EmissionActivity.created_at.desc())
+        else:
+            query = query.order_by(fallback_name.desc(), EmissionActivity.created_at.desc())
+            
+    else:
+        # For created_at and other fields, use directly (shouldn't be null normally)
+        if sort_order_lower == "asc":
+            query = query.order_by(sort_field.asc(), EmissionActivity.id.desc())
+        else:
+            query = query.order_by(sort_field.desc(), EmissionActivity.id.desc())
+
+    # Apply pagination
+    activities = query.offset(skip).limit(limit).all()
 
     return {
         "success": True,
@@ -355,6 +467,16 @@ async def get_activities(
         "count": len(activities),
         "skip": skip,
         "limit": limit,
+        "sort_by": sort_by,
+        "sort_order": sort_order_lower,
+        "filters_applied": {
+            "scope": scope,
+            "category": category,
+            "activity_type": activity_type,
+            "search": search,
+            "start_date": start_date,
+            "end_date": end_date
+        },
         "activities": [a.to_dict() for a in activities]
     }
 
